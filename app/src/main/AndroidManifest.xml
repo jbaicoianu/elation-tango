@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.projecttango.experiments.nativepointcloud"
+    package="com.elation.tango.pointcloudviewer"
     android:versionCode="0"
     android:versionName="0" >
     
@@ -22,7 +22,7 @@
             android:required="true" />
         <activity
             android:label="@string/menu_name"
-            android:name="com.projecttango.experiments.nativepointcloud.PointcloudActivity"
+            android:name="com.elation.tango.pointcloudviewer.PointcloudActivity"
             android:screenOrientation="landscape">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

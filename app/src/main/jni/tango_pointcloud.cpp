@@ -246,15 +246,17 @@ class AppMessageTangoPose : public AppMessage {
 };
 class AppMessageTangoPoints : public AppMessage {
   public:
+    uint32_t totalpoints;
+    uint32_t maxpoints;
     uint32_t numpoints;
     float *pointdata;
 
-    AppMessageTangoPoints(uint32_t numpoints, float *pointdata) : AppMessage() {
+    AppMessageTangoPoints(uint32_t totalpoints, float *pointdata) : AppMessage() {
       this->type = AppMessageTypes::TangoPoints;
 
-      int maxpoints = 2000;
-
-      this->numpoints = (numpoints < maxpoints ? numpoints : maxpoints);
+      this->totalpoints = totalpoints;
+      this->maxpoints = 2000;
+      this->numpoints = (totalpoints < this->maxpoints ? totalpoints : this->maxpoints);
       this->pointdata = pointdata;
     }
     virtual uint32_t payloadLength() {
@@ -262,7 +264,21 @@ class AppMessageTangoPoints : public AppMessage {
     }
     virtual void encodePayload() {
       memcpy(this->payload, &this->numpoints, sizeof(uint32_t));
-      memcpy(this->payload + sizeof(uint32_t), this->pointdata, this->payloadLength());
+
+      // Random sampling
+      float *sampledpoints = (float *) (this->payload + sizeof(uint32_t));
+      memcpy(sampledpoints, this->pointdata, this->payloadLength() - sizeof(float));
+      if (this->numpoints < this->totalpoints) {
+        srand(time(NULL));
+        for (int i = this->numpoints; i < this->totalpoints; i++) {
+          int j = rand() % (i+1);
+          if (j < this->numpoints) {
+            sampledpoints[j * 3    ] = this->pointdata[i * 3    ];
+            sampledpoints[j * 3 + 1] = this->pointdata[i * 3 + 1];
+            sampledpoints[j * 3 + 2] = this->pointdata[i * 3 + 2];
+          }
+        }
+      }
     }
 };
 
@@ -470,7 +486,7 @@ extern "C" {
 #endif
 // Tango Service interfaces.
 JNIEXPORT jint JNICALL
-Java_com_projecttango_experiments_nativepointcloud_TangoJNINative_initialize(
+Java_com_elation_tango_pointcloudviewer_TangoJNINative_initialize(
     JNIEnv* env, jobject, jobject activity) {
   TangoErrorType err = TangoData::GetInstance().Initialize(env, activity);
   if (err != TANGO_SUCCESS) {
@@ -484,7 +500,7 @@ Java_com_projecttango_experiments_nativepointcloud_TangoJNINative_initialize(
 }
 
 JNIEXPORT void JNICALL
-Java_com_projecttango_experiments_nativepointcloud_TangoJNINative_setupConfig(
+Java_com_elation_tango_pointcloudviewer_TangoJNINative_setupConfig(
     JNIEnv*, jobject) {
   if (!TangoData::GetInstance().SetConfig()) {
     LOGE("Tango set config failed");
@@ -492,7 +508,7 @@ Java_com_projecttango_experiments_nativepointcloud_TangoJNINative_setupConfig(
 }
 
 JNIEXPORT void JNICALL
-Java_com_projecttango_experiments_nativepointcloud_TangoJNINative_connectCallbacks(
+Java_com_elation_tango_pointcloudviewer_TangoJNINative_connectCallbacks(
     JNIEnv*, jobject) {
   if (!TangoData::GetInstance().ConnectCallbacks()) {
     LOGE("Tango ConnectCallbacks failed");
@@ -500,7 +516,7 @@ Java_com_projecttango_experiments_nativepointcloud_TangoJNINative_connectCallbac
 }
 
 JNIEXPORT jint JNICALL
-Java_com_projecttango_experiments_nativepointcloud_TangoJNINative_connect(
+Java_com_elation_tango_pointcloudviewer_TangoJNINative_connect(
     JNIEnv*, jobject) {
   TangoErrorType err = TangoData::GetInstance().Connect();
   if (err != TANGO_SUCCESS) {
@@ -510,7 +526,7 @@ Java_com_projecttango_experiments_nativepointcloud_TangoJNINative_connect(
 }
 
 JNIEXPORT void JNICALL
-Java_com_projecttango_experiments_nativepointcloud_TangoJNINative_setupExtrinsics(
+Java_com_elation_tango_pointcloudviewer_TangoJNINative_setupExtrinsics(
     JNIEnv*, jobject) {
   // The extrinsics can only be queried after connected to service.
   if (!TangoData::GetInstance().SetupExtrinsicsMatrices()) {
@@ -519,13 +535,13 @@ Java_com_projecttango_experiments_nativepointcloud_TangoJNINative_setupExtrinsic
 }
 
 JNIEXPORT void JNICALL
-Java_com_projecttango_experiments_nativepointcloud_TangoJNINative_disconnect(
+Java_com_elation_tango_pointcloudviewer_TangoJNINative_disconnect(
     JNIEnv*, jobject) {
   TangoData::GetInstance().Disconnect();
 }
 
 JNIEXPORT void JNICALL
-Java_com_projecttango_experiments_nativepointcloud_TangoJNINative_freeGLContent(
+Java_com_elation_tango_pointcloudviewer_TangoJNINative_freeGLContent(
     JNIEnv*, jobject) {
   if (cam != NULL) {
     delete cam;
@@ -560,32 +576,32 @@ Java_com_projecttango_experiments_nativepointcloud_TangoJNINative_freeGLContent(
 
 // Graphic interfaces.
 JNIEXPORT void JNICALL
-Java_com_projecttango_experiments_nativepointcloud_TangoJNINative_initGlContent(
+Java_com_elation_tango_pointcloudviewer_TangoJNINative_initGlContent(
     JNIEnv*, jobject) {
   InitGlContent();
 }
 
 JNIEXPORT void JNICALL
-Java_com_projecttango_experiments_nativepointcloud_TangoJNINative_setupGraphic(
+Java_com_elation_tango_pointcloudviewer_TangoJNINative_setupGraphic(
     JNIEnv*, jobject, jint width, jint height) {
   SetupGraphics(width, height);
 }
 
 JNIEXPORT void JNICALL
-Java_com_projecttango_experiments_nativepointcloud_TangoJNINative_render(
+Java_com_elation_tango_pointcloudviewer_TangoJNINative_render(
     JNIEnv*, jobject) {
   RenderFrame();
 }
 
 JNIEXPORT void JNICALL
-Java_com_projecttango_experiments_nativepointcloud_TangoJNINative_setCamera(
+Java_com_elation_tango_pointcloudviewer_TangoJNINative_setCamera(
     JNIEnv*, jobject, int camera_index) {
   SetCamera(static_cast<CameraType>(camera_index));
 }
 
 // Tango data interfaces.
 JNIEXPORT jstring JNICALL
-Java_com_projecttango_experiments_nativepointcloud_TangoJNINative_getPoseString(
+Java_com_elation_tango_pointcloudviewer_TangoJNINative_getPoseString(
     JNIEnv* env, jobject) {
   pthread_mutex_lock(&TangoData::GetInstance().pose_mutex);
   std::string ret_string = TangoData::GetInstance().pose_string;
@@ -594,7 +610,7 @@ Java_com_projecttango_experiments_nativepointcloud_TangoJNINative_getPoseString(
 }
 
 JNIEXPORT jstring JNICALL
-Java_com_projecttango_experiments_nativepointcloud_TangoJNINative_getEventString(
+Java_com_elation_tango_pointcloudviewer_TangoJNINative_getEventString(
     JNIEnv* env, jobject) {
   pthread_mutex_lock(&TangoData::GetInstance().event_mutex);
   std::string ret_string = TangoData::GetInstance().event_string;
@@ -603,14 +619,14 @@ Java_com_projecttango_experiments_nativepointcloud_TangoJNINative_getEventString
 }
 
 JNIEXPORT jstring JNICALL
-Java_com_projecttango_experiments_nativepointcloud_TangoJNINative_getVersionNumber(
+Java_com_elation_tango_pointcloudviewer_TangoJNINative_getVersionNumber(
     JNIEnv* env, jobject) {
   return (env)
       ->NewStringUTF(TangoData::GetInstance().lib_version_string.c_str());
 }
 
 JNIEXPORT jint JNICALL
-Java_com_projecttango_experiments_nativepointcloud_TangoJNINative_getVerticesCount(
+Java_com_elation_tango_pointcloudviewer_TangoJNINative_getVerticesCount(
     JNIEnv*, jobject) {
   pthread_mutex_lock(&TangoData::GetInstance().xyzij_mutex);
   int ret_val = TangoData::GetInstance().depth_buffer_size;
@@ -619,7 +635,7 @@ Java_com_projecttango_experiments_nativepointcloud_TangoJNINative_getVerticesCou
 }
 
 JNIEXPORT float JNICALL
-Java_com_projecttango_experiments_nativepointcloud_TangoJNINative_getAverageZ(
+Java_com_elation_tango_pointcloudviewer_TangoJNINative_getAverageZ(
     JNIEnv*, jobject) {
   pthread_mutex_lock(&TangoData::GetInstance().xyzij_mutex);
   float ret_val = TangoData::GetInstance().depth_average_length;
@@ -628,7 +644,7 @@ Java_com_projecttango_experiments_nativepointcloud_TangoJNINative_getAverageZ(
 }
 
 JNIEXPORT float JNICALL
-Java_com_projecttango_experiments_nativepointcloud_TangoJNINative_getFrameDeltaTime(
+Java_com_elation_tango_pointcloudviewer_TangoJNINative_getFrameDeltaTime(
     JNIEnv*, jobject) {
   pthread_mutex_lock(&TangoData::GetInstance().xyzij_mutex);
   float ret_val = TangoData::GetInstance().depth_frame_delta_time;
@@ -638,7 +654,7 @@ Java_com_projecttango_experiments_nativepointcloud_TangoJNINative_getFrameDeltaT
 
 // Touching GL interface.
 JNIEXPORT void JNICALL
-Java_com_projecttango_experiments_nativepointcloud_TangoJNINative_startSetCameraOffset(
+Java_com_elation_tango_pointcloudviewer_TangoJNINative_startSetCameraOffset(
     JNIEnv*, jobject) {
   if (cam != NULL) {
     cam_start_angle[0] = cam_cur_angle[0];
@@ -648,7 +664,7 @@ Java_com_projecttango_experiments_nativepointcloud_TangoJNINative_startSetCamera
 }
 
 JNIEXPORT void JNICALL
-Java_com_projecttango_experiments_nativepointcloud_TangoJNINative_setCameraOffset(
+Java_com_elation_tango_pointcloudviewer_TangoJNINative_setCameraOffset(
     JNIEnv*, jobject, float rotation_x, float rotation_y, float dist) {
   if (cam != NULL) {
     cam_cur_angle[0] = cam_start_angle[0] + rotation_x;

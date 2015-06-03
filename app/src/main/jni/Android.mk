@@ -14,8 +14,8 @@
 # limitations under the License.
 #
 LOCAL_PATH := $(call my-dir)
-PROJECT_ROOT_FROM_JNI:= ../../../../..
-PROJECT_ROOT:= $(call my-dir)/../../../../..
+PROJECT_ROOT_FROM_JNI:= ../../../..
+PROJECT_ROOT:= $(call my-dir)/../../../..
 
 include $(CLEAR_VARS)
 LOCAL_MODULE    := libpoint_cloud_jni_example
@@ -25,21 +25,21 @@ LOCAL_CFLAGS    := -std=c++11
 LOCAL_SRC_FILES := tango_data.cpp \
                    tango_pointcloud.cpp \
                    pointcloud.cpp \
-                   $(PROJECT_ROOT_FROM_JNI)/tango-gl/axis.cpp \
-                   $(PROJECT_ROOT_FROM_JNI)/tango-gl/camera.cpp \
-                   $(PROJECT_ROOT_FROM_JNI)/tango-gl/drawable_object.cpp \
-                   $(PROJECT_ROOT_FROM_JNI)/tango-gl/frustum.cpp \
-                   $(PROJECT_ROOT_FROM_JNI)/tango-gl/grid.cpp \
-                   $(PROJECT_ROOT_FROM_JNI)/tango-gl/line.cpp \
-                   $(PROJECT_ROOT_FROM_JNI)/tango-gl/shaders.cpp \
-                   $(PROJECT_ROOT_FROM_JNI)/tango-gl/transform.cpp \
-                   $(PROJECT_ROOT_FROM_JNI)/tango-gl/util.cpp
+                   $(PROJECT_ROOT_FROM_JNI)/third-party/tango-gl/axis.cpp \
+                   $(PROJECT_ROOT_FROM_JNI)/third-party/tango-gl/camera.cpp \
+                   $(PROJECT_ROOT_FROM_JNI)/third-party/tango-gl/drawable_object.cpp \
+                   $(PROJECT_ROOT_FROM_JNI)/third-party/tango-gl/frustum.cpp \
+                   $(PROJECT_ROOT_FROM_JNI)/third-party/tango-gl/grid.cpp \
+                   $(PROJECT_ROOT_FROM_JNI)/third-party/tango-gl/line.cpp \
+                   $(PROJECT_ROOT_FROM_JNI)/third-party/tango-gl/shaders.cpp \
+                   $(PROJECT_ROOT_FROM_JNI)/third-party/tango-gl/transform.cpp \
+                   $(PROJECT_ROOT_FROM_JNI)/third-party/tango-gl/util.cpp
 
-LOCAL_C_INCLUDES := $(PROJECT_ROOT)/tango-gl/include \
+LOCAL_C_INCLUDES := $(PROJECT_ROOT)/third-party/tango-gl/include \
                     $(PROJECT_ROOT)/third-party/glm/
 
 LOCAL_LDLIBS    := -llog -lGLESv2 -L$(SYSROOT)/usr/lib
 include $(BUILD_SHARED_LIBRARY)
 
-$(call import-add-path, $(PROJECT_ROOT))
+$(call import-add-path, $(PROJECT_ROOT)/third-party)
 $(call import-module,tango_client_api)
