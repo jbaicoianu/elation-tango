@@ -20,7 +20,7 @@ net.createServer(function(socket) {
     var start = recvbuf.length;
     recvbuf = Buffer.concat([recvbuf, data]);
 
-    var headersize = 5; // [ uint8 | uint32 ]
+    var headersize = 8; // [ uint8 | uint8 | uint8 | uint8 | uint32 ]
 
     var type = recvbuf.readUInt8(0);
     var size = recvbuf.readUInt32LE(1);
@@ -141,7 +141,8 @@ AppMessageTangoPoints.prototype.parsePayload = function(data) {
   // -------------------------------------
   // | type          | uint8             |
   // | numpoints     | int32             |
-  // | pointdata     | double[numpoints] |
+  // | pointdata     | float[numpoints*3]|
+  // | colordata     | uint8[numpoints*3]|
   // -------------------------------------
 
   this.numpoints = data.readUInt32LE(0);
@@ -150,9 +151,12 @@ AppMessageTangoPoints.prototype.parsePayload = function(data) {
   //var pointdata = new Float32Array(data, pointoffset, this.numpoints * 3);
 
   this.pointdata = [];
-  for (var i = 0; i < this.numpoints-1; i++) {
-    var offset = pointoffset + (i * 3 * 4);
-    this.pointdata[i] = [data.readFloatLE(offset), data.readFloatLE(offset + 4), data.readFloatLE(offset + 8)];
+  this.colordata = [];
+  for (var i = 0; i < this.numpoints; i++) {
+    var offset = pointoffset + (i * 3 * 4),
+        coloroffset = pointoffset + (3 * this.numpoints * 4) + (i * 3);
+    this.pointdata[i] = [data.readFloatLE(offset), data.readFloatLE(offset + 4), data.readFloatLE(offset + 8), data.readUInt32LE(pointoffset + (this.numpoints * 4) + (i * 4))];
+    this.colordata[i] = [data.readUInt8(coloroffset), data.readUInt8(coloroffset + 1), data.readUInt8(coloroffset + 2)];
   }
 }
 AppMessageTangoPoints.prototype.summary = function() {

@@ -90,6 +90,19 @@ static void onPoseAvailable(void*, const TangoPoseData* pose) {
   pthread_mutex_unlock(&TangoData::GetInstance().pose_mutex);
 }
 
+static void onFrameAvailable(void*, TangoCameraId id, const TangoImageBuffer* imgbuf) {
+  pthread_mutex_lock(&TangoData::GetInstance().frame_mutex);
+  if (imgbuf != nullptr) {
+    LOGI("TangoService_onFrameAvailable(): bling: (%d x %d) %d", imgbuf->width, imgbuf->height, imgbuf->stride);
+
+    TangoData::GetInstance().full_frame_data = *imgbuf;
+    memcpy(&TangoData::GetInstance().cur_frame_data, imgbuf->data, imgbuf->width * imgbuf->height);
+
+    TangoData::GetInstance().is_frame_dirty = true;
+  }
+  pthread_mutex_unlock(&TangoData::GetInstance().frame_mutex);
+}
+
 // Initialize Tango Service.
 TangoErrorType TangoData::Initialize(JNIEnv* env, jobject activity) {
   // The initialize function perform API and Tango Service version check,
@@ -121,6 +134,13 @@ bool TangoData::SetConfig() {
   if (TangoConfig_setBool(config_, "config_enable_depth", true) !=
       TANGO_SUCCESS) {
     LOGE("config_enable_depth Failed");
+    return false;
+  }
+
+  // Enable color.
+  if (TangoConfig_setBool(config_, "config_enable_color_camera", true) !=
+      TANGO_SUCCESS) {
+    LOGE("config_enable_color_camera Failed");
     return false;
   }
 
@@ -169,6 +189,13 @@ bool TangoData::ConnectCallbacks() {
   if (TangoService_connectOnPoseAvailable(1, &pairs, onPoseAvailable) !=
       TANGO_SUCCESS) {
     LOGI("TangoService_connectOnPoseAvailable(): Failed");
+    return false;
+  }
+
+  // Attach onFrameAvailable callback.
+  if (TangoService_connectOnFrameAvailable(TANGO_CAMERA_COLOR, NULL, onFrameAvailable) !=
+      TANGO_SUCCESS) {
+    LOGI("TangoService_connectOnFrameAvailable(): Failed");
     return false;
   }
 

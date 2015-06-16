@@ -73,7 +73,7 @@ void Pointcloud::Render(glm::mat4 projection_mat, glm::mat4 view_mat,
   // Unlock xyz_ij mutex.
   pthread_mutex_unlock(&TangoData::GetInstance().xyzij_mutex);
 
-  tango_gl::util::CheckGlError("glDrawArray()");
+  //tango_gl::util::CheckGlError("glDrawArray()");
   glUseProgram(0);
   tango_gl::util::CheckGlError("glUseProgram()");
 }

@@ -61,12 +61,19 @@ class TangoData {
   void UpdateXYZijData();
 
   pthread_mutex_t pose_mutex;
+  pthread_mutex_t frame_mutex;
   pthread_mutex_t xyzij_mutex;
   pthread_mutex_t event_mutex;
 
   float* depth_buffer;
   uint32_t depth_buffer_size;
   bool is_xyzij_dirty;
+
+  uint8_t cur_frame_data[1280*720*4];
+  uint32_t frame_width;
+  uint32_t frame_height;
+  TangoImageBuffer full_frame_data;
+  bool is_frame_dirty;
 
   TangoPoseData cur_pose_data;
   TangoPoseData prev_pose_data;

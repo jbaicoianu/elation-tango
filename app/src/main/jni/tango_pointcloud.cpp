@@ -37,9 +37,9 @@
 #include <stdint.h>
 #include <fcntl.h>
 
-
-
-
+#include <pcl/io/pcd_io.h>
+#include <pcl/point_types.h>
+#include <pcl/filters/voxel_grid.h>
 
 // Screen size.
 GLuint screen_width;
@@ -141,7 +141,8 @@ class AppMessage {
       return this->headerLength() + this->payloadLength();
     }
     uint32_t headerLength() {
-      return sizeof(uint8_t) + sizeof(uint32_t);
+      int padding = sizeof(uint8_t) * 3;
+      return sizeof(uint8_t) + sizeof(uint32_t) + padding;
     }
     virtual uint32_t payloadLength() {
       return 0;
@@ -152,11 +153,13 @@ class AppMessage {
       uint32_t packetlen = this->packetLength();
 
       this->data = new char[packetlen];
-      memset(this->data, 0, packetlen);
-      this->data[0] = this->type;
+      //LOGI("allocated %d bytes (%p - %p)", packetlen, this->data, this->data + packetlen);
+      memcpy(this->data, &this->type, sizeof(uint8_t));
       memcpy(this->data+1, &payloadlen, sizeof(uint32_t));
 
       this->payload = this->data + headerlen;
+      memset(this->payload, 0, payloadlen);
+      //LOGI("set payload pointer (%p)", this->payload);
 
       this->encodePayload();
 
@@ -212,7 +215,6 @@ class AppMessageTangoIntro : public AppMessage {
       float fov = 2 * atan2(0.5 * intrinsics.height, intrinsics.fy) * 180/M_PI;
       float aspect = intrinsics.width / intrinsics.height;
 
-
       memcpy(this->payload, &fov, sizeof(float));
       memcpy(this->payload + sizeof(float), &aspect, sizeof(float));
       memcpy(this->payload + 2 * sizeof(float), &intrinsics.fy, sizeof(double));
@@ -250,24 +252,78 @@ class AppMessageTangoPoints : public AppMessage {
     uint32_t maxpoints;
     uint32_t numpoints;
     float *pointdata;
+    TangoImageBuffer imagebuf;
+    //pcl::PCLPointCloud2::Ptr cloud;
+    sensor_msgs::PointCloud2::Ptr cloud;
+    sensor_msgs::PointCloud2::Ptr cloud_filtered;
 
     AppMessageTangoPoints(uint32_t totalpoints, float *pointdata) : AppMessage() {
       this->type = AppMessageTypes::TangoPoints;
 
       this->totalpoints = totalpoints;
-      this->maxpoints = 2000;
+      this->maxpoints = 1250;
       this->numpoints = (totalpoints < this->maxpoints ? totalpoints : this->maxpoints);
       this->pointdata = pointdata;
+
+      sensor_msgs::PointCloud2::Ptr cloud (new sensor_msgs::PointCloud2());
+      sensor_msgs::PointCloud2::Ptr cloud_filtered (new sensor_msgs::PointCloud2());
+      this->cloud = cloud;
+      this->cloud_filtered = cloud_filtered;
+
+      cloud->width = this->totalpoints;
+      cloud->height = 1;
+
+      cloud->fields.resize(3);
+
+      // Set x/y/z as the only fields
+      cloud->fields[0].name = "x";
+      cloud->fields[1].name = "y";
+      cloud->fields[2].name = "z";
+
+      int offset = 0;
+      // All offsets are *4, as all field data types are float32
+      for (size_t d = 0; d < cloud->fields.size(); ++d, offset += 4)
+      {
+        cloud->fields[d].count    = 1;
+        cloud->fields[d].offset   = offset;
+        cloud->fields[d].datatype = sensor_msgs::PointField::FLOAT32;
+      }
+
+      cloud->point_step = offset;
+      cloud->row_step   = cloud->point_step * cloud->width;
+
+      cloud->data.resize(this->totalpoints * cloud->point_step);
+      cloud->is_bigendian = false;
+      cloud->is_dense     = true;
+
+/*
+      for (int i = 0; i < this->totalpoints; i++) {
+        pcl::PointXYZ point(pointdata[i * 3], pointdata[i * 3 + 1], pointdata[i * 3 + 2]);
+        //cloud->points.push_back(point);
+      }
+*/
+      memcpy(&cloud->data[0], this->pointdata, cloud->point_step * this->totalpoints);
+
+      pcl::VoxelGrid< sensor_msgs::PointCloud2 > sor;
+      sor.setInputCloud (cloud);
+      sor.setLeafSize (0.05f, 0.05f, 0.05f);
+
+      sor.filter (*this->cloud_filtered);
+
+      this->numpoints = this->cloud_filtered->width;
+
+      //this->imagebuf = imagebuf;
     }
     virtual uint32_t payloadLength() {
-      return sizeof(float) * this->numpoints * 3;
+      return sizeof(uint32_t) + this->numpoints * ((sizeof(float) + sizeof(uint8_t)) * 3);
     }
     virtual void encodePayload() {
       memcpy(this->payload, &this->numpoints, sizeof(uint32_t));
 
-      // Random sampling
       float *sampledpoints = (float *) (this->payload + sizeof(uint32_t));
-      memcpy(sampledpoints, this->pointdata, this->payloadLength() - sizeof(float));
+/*
+      // Random sampling
+      memcpy(sampledpoints, this->pointdata, this->numpoints * sizeof(float) * 3);
       if (this->numpoints < this->totalpoints) {
         srand(time(NULL));
         for (int i = this->numpoints; i < this->totalpoints; i++) {
@@ -279,7 +335,111 @@ class AppMessageTangoPoints : public AppMessage {
           }
         }
       }
+*/
+      memcpy(sampledpoints, &this->cloud_filtered->data[0], this->numpoints * sizeof(float) * 3);
+      //LOGI("burp %f", sampledpoints[0] );
+/*
+      LOGI("derp %p", sampledpoints);
+      //sampledpoints[0] = 123.45;
+    delete[] sampledpoints;
+*/
+      uint8_t *rgb = (uint8_t *) (this->payload + (sizeof(uint32_t) + sizeof(float) * this->numpoints * 3));
+      //memset(rgb, 0, sizeof(uint32_t) * this->numpoints);
+      
+      pthread_mutex_lock(&TangoData::GetInstance().frame_mutex);
+      TangoImageBuffer *imgbuf = &TangoData::GetInstance().full_frame_data;
+      uint8_t *framedataYUV = TangoData::GetInstance().cur_frame_data;
+      uint8_t framedata[imgbuf->width * imgbuf->height * 3];
+
+uint8_t* pData = TangoData::GetInstance().cur_frame_data;
+uint8_t* iData = framedata;
+int size = (int)(imgbuf->stride * imgbuf->height);
+float invByte = 0.0039215686274509803921568627451;  // ( 1 / 255)
+
+int halfi, uvOffset, halfj, uvOffsetHalfj;
+float y_scaled, v_scaled, u_scaled;
+int uOffset = size / 4 + size;
+int halfstride = imgbuf->stride / 2;
+for (int i = 0; i < imgbuf->height; ++i)
+{
+    halfi = i / 2;
+    uvOffset = halfi * halfstride;
+    for (int j = 0; j < imgbuf->width; ++j)
+    {
+        halfj = j / 2;
+        uvOffsetHalfj = uvOffset + halfj;
+        y_scaled = pData[i * imgbuf->stride + j] * invByte;
+/*
+        v_scaled = 2 * (pData[uvOffsetHalfj + size] * invByte - 0.5f) * 1;
+        u_scaled = 2 * (pData[uvOffsetHalfj + uOffset] * invByte - 0.5f) * 1;
+        *iData++ = (uint8_t)((y_scaled + 1.13983f * v_scaled) * 255.0);;
+        *iData++ = (uint8_t)((y_scaled - 0.39465f * u_scaled - 0.58060f * v_scaled) * 255.0);
+        *iData++ = (uint8_t)((y_scaled + 2.03211f * u_scaled) * 255.0);
+*/
+        //*iData++ = 255;
     }
+}
+
+
+if (false) {
+      for (int i = 0; i < this->numpoints; i++) {
+        int xyzidx = i * 3;
+        int rgbidx = i * 3;
+
+        float *xyz = sampledpoints + xyzidx;
+        int32_t cx = (int32_t) ((xyz[0] + 1) * 0.5 * imgbuf->width);
+        int32_t cy = (int32_t) ((xyz[1] + 1) * 0.5 * imgbuf->height);
+        
+        if (cx >= 0 && cx <= imgbuf->width && cy >= 0 && cy <= imgbuf->height) {
+          //uint8_t *foo = imgbuf->data + (imgbuf->width * cy + cx);
+          uint8_t *pixel = framedata + ((cy * imgbuf->stride + cx) * 3);
+          //uint8_t pixel[3];
+          LOGI("hello yeah %d (%f, %f) => (%d, %d) = [%x, %x, %x]", i, xyz[0], xyz[1], cx, cy, pixel[0], pixel[1], pixel[2]);
+          //uint8_t color[3]
+          //memcpy(rgb + rgbidx, pixel, sizeof(uint8_t) * 3);
+/*
+          rgb[rgbidx] = pixel[0];
+          rgb[rgbidx+1] = pixel[1];
+          rgb[rgbidx+2] = pixel[2];
+*/
+
+        }
+      }
+}
+      pthread_mutex_unlock(&TangoData::GetInstance().frame_mutex);
+    }
+};
+
+class AppCloudFilter {
+public:
+  sensor_msgs::PointCloud2 output;
+  virtual sensor_msgs::PointCloud2::Ptr filter(sensor_msgs::PointCloud2::Ptr input);
+};
+class AppCloudFilterRandomSample : public AppCloudFilter {
+public:
+  virtual sensor_msgs::PointCloud2::Ptr filter(sensor_msgs::PointCloud2::Ptr input) {
+    this->output.width = input.width;
+    this->output.height = input.height;
+    this->output.data.resize(input.width * input.height);
+
+    // Random sampling
+    memcpy(this->output.data[0], this->pointdata, this->numpoints * sizeof(float) * 3);
+    if (this->numpoints < this->totalpoints) {
+      srand(time(NULL));
+      for (int i = this->numpoints; i < this->totalpoints; i++) {
+        int j = rand() % (i+1);
+        if (j < this->numpoints) {
+          sampledpoints[j * 3    ] = this->pointdata[i * 3    ];
+          sampledpoints[j * 3 + 1] = this->pointdata[i * 3 + 1];
+          sampledpoints[j * 3 + 2] = this->pointdata[i * 3 + 2];
+        }
+      }
+    }
+  }
+};
+class AppCloudFilterCleanup : public AppCloudFilter {
+};
+class AppCloudFilterVoxelize : public AppCloudFilter {
 };
 
 AppServer appserver;

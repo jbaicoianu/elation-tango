@@ -18,9 +18,16 @@ PROJECT_ROOT_FROM_JNI:= ../../../..
 PROJECT_ROOT:= $(call my-dir)/../../../..
 
 include $(CLEAR_VARS)
+LOCAL_MODULE    := libpcl 
+LOCAL_SRC_FILES := $(PROJECT_ROOT_FROM_JNI)/third-party/pcl/lib/*.a
+
+include $(PREBUILT_STATIC_LIBRARY)
+
+
+include $(CLEAR_VARS)
 LOCAL_MODULE    := libpoint_cloud_jni_example
 LOCAL_SHARED_LIBRARIES := tango_client_api
-LOCAL_CFLAGS    := -std=c++11
+LOCAL_CFLAGS    := -std=c++11 -fexceptions
 
 LOCAL_SRC_FILES := tango_data.cpp \
                    tango_pointcloud.cpp \
@@ -33,12 +40,14 @@ LOCAL_SRC_FILES := tango_data.cpp \
                    $(PROJECT_ROOT_FROM_JNI)/third-party/tango-gl/line.cpp \
                    $(PROJECT_ROOT_FROM_JNI)/third-party/tango-gl/shaders.cpp \
                    $(PROJECT_ROOT_FROM_JNI)/third-party/tango-gl/transform.cpp \
-                   $(PROJECT_ROOT_FROM_JNI)/third-party/tango-gl/util.cpp
+                   $(PROJECT_ROOT_FROM_JNI)/third-party/tango-gl/util.cpp \
 
 LOCAL_C_INCLUDES := $(PROJECT_ROOT)/third-party/tango-gl/include \
-                    $(PROJECT_ROOT)/third-party/glm/
+                    $(PROJECT_ROOT)/third-party/glm/ \
+                    $(PROJECT_ROOT)/third-party/pcl/include
 
 LOCAL_LDLIBS    := -llog -lGLESv2 -L$(SYSROOT)/usr/lib
+LOCAL_STATIC_LIBRARIES := libpcl
 include $(BUILD_SHARED_LIBRARY)
 
 $(call import-add-path, $(PROJECT_ROOT)/third-party)
